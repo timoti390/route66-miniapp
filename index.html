@@ -178,155 +178,173 @@
   <div id="products" class="products"></div>
 
   <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();
+  const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRHotJMj91JKvS9RqK0zdfp8JVDj8KTm6HIrp5U1TeWOf3A7bXkfH6nCzxUWSgdwFSOkArHqmev8Z8B/pub?gid=978912227&single=true&output=csv";
 
-   const API_BASE = "";
+  const tg = window.Telegram?.WebApp;
+  if (tg) tg.expand();
 
-    const categoriesEl = document.getElementById("categories");
-    const productsEl = document.getElementById("products");
+  const categoriesEl = document.getElementById("categories");
+  const productsEl = document.getElementById("products");
 
-    let currentCategory = null;
+  const CATEGORIES = ["декор", "музыка", "канцелярия", "спорт", "медиа", "прочее"];
 
-    async function loadCategories() {
-      const res = await fetch(`${API_BASE}/categories`);
-      const data = await res.json();
+  let allProducts = [];
+  let currentCategory = "декор";
 
-      categoriesEl.innerHTML = "";
+  function parseCSVLine(line) {
+    const result = [];
+    let current = "";
+    let inQuotes = false;
 
-      data.categories.forEach(category => {
-        const btn = document.createElement("button");
-        btn.className = "category-btn";
-        btn.textContent = category;
-        btn.onclick = () => selectCategory(category, btn);
-        categoriesEl.appendChild(btn);
-      });
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const next = line[i + 1];
 
-      const firstBtn = categoriesEl.querySelector(".category-btn");
-      if (data.categories.length > 0 && firstBtn) {
-        selectCategory(data.categories[0], firstBtn);
+      if (char === '"') {
+        if (inQuotes && next === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === "," && !inQuotes) {
+        result.push(current);
+        current = "";
+      } else {
+        current += char;
       }
     }
 
-    async function selectCategory(category, btnElement) {
-      currentCategory = category;
+    result.push(current);
+    return result;
+  }
 
-      document.querySelectorAll(".category-btn").forEach(btn => {
-        btn.classList.remove("active");
-      });
+  function statusText(status) {
+    const s = String(status || "").trim().toLowerCase();
+    if (s === "free") return "🟢 В наличии";
+    if (s === "reserved") return "🟡 Забронирован";
+    if (s === "sold") return "🔴 Куплен";
+    return "⚪ Неизвестно";
+  }
 
-      btnElement.classList.add("active");
-      await loadProducts(category);
-    }
+  function buildCategories() {
+    categoriesEl.innerHTML = "";
 
-    function statusText(status) {
-      if (status === "free") return "🟢 В наличии";
-      if (status === "reserved") return "🟡 Забронирован";
-      if (status === "sold") return "🔴 Куплен";
-      return "⚪ Неизвестно";
-    }
+    CATEGORIES.forEach(category => {
+      const btn = document.createElement("button");
+      btn.className = "category-btn";
+      if (category === currentCategory) btn.classList.add("active");
 
-    async function loadProducts(category) {
-      const res = await fetch(`${API_BASE}/products/${encodeURIComponent(category)}`);
-      const data = await res.json();
+      btn.textContent = category;
+      btn.onclick = () => {
+        currentCategory = category;
+        document.querySelectorAll(".category-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        renderProducts();
+      };
 
-      productsEl.innerHTML = "";
+      categoriesEl.appendChild(btn);
+    });
+  }
 
-      data.products.forEach(product => {
-        const card = document.createElement("div");
-        card.className = "card";
+  function renderProducts() {
+    productsEl.innerHTML = "";
 
-        const imgHtml = product.image
-          ? `<img src="${product.image}" alt="${product.name}">`
-          : product.image_link
-          ? `<img src="${product.image_link}" alt="${product.name}">`
-          : "";
+    const filtered = allProducts.filter(product =>
+      String(product.category || "").trim().toLowerCase() === currentCategory
+    );
 
-       const reserveButton =
-  product.status === "free"
-    ? `<div style="flex:1;"><button class="btn btn-reserve" onclick="reserveProduct(${product.id})">Забронировать</button></div>`
-    : `<div style="flex:1;"><button class="btn btn-disabled" disabled>Недоступно</button></div>`;
-        const productUrl = product.full_link || product.product_link || "#";
+    filtered.forEach(product => {
+      const card = document.createElement("div");
+      card.className = "card";
 
-card.innerHTML = `
-  ${imgHtml}
+      const imgSrc = product.image_link || product.image || "";
+      const imgHtml = imgSrc ? `<img src="${imgSrc}" alt="${product.name || ""}">` : "";
 
-  <div class="product-info">
+      const productUrl = product.full_link || product.product_link || "#";
 
-    <div class="title">${product.name || ""}</div>
+      card.innerHTML = `
+        ${imgHtml}
 
-    <div class="price">
-      ${product.price ? product.price + " ₽" : "Цена не указана"}
-    </div>
+        <div class="product-info">
+          <div class="title">${product.name || ""}</div>
 
-    <div class="status">${statusText(product.status)}</div>
+          <div class="price">
+            ${product.price ? product.price + " ₽" : "Цена не указана"}
+          </div>
 
-    <div class="note">
-      ${product.note ? product.note : ""}
-    </div>
+          <div class="status">${statusText(product.status)}</div>
 
-    <div class="address">
-      ${product.pickup_address ? "ПВЗ: " + product.pickup_address : ""}
-    </div>
+          <div class="note">
+            ${product.note ? product.note : ""}
+          </div>
 
-    <div class="actions">
+          <div class="address">
+            ${product.pickup_address ? "ПВЗ: " + product.pickup_address : ""}
+          </div>
 
-      <a href="${productUrl}" target="_blank" style="flex:1;">
-        <button class="btn btn-link">Открыть</button>
-      </a>
+          <div class="actions">
+            <a href="${productUrl}" target="_blank" style="flex:1;">
+              <button class="btn btn-link">Открыть</button>
+            </a>
 
-      <div style="flex:1;">
-        ${
-          product.status === "free"
-          ? `<button class="btn btn-reserve" onclick="reserveProduct(${product.id})">Бронь</button>`
-          : `<button class="btn btn-disabled" disabled>Нет</button>`
-        }
-      </div>
+            <div style="flex:1;">
+              ${
+                String(product.status || "").trim().toLowerCase() === "free"
+                  ? `<button class="btn btn-reserve" onclick="reserveProduct(${product.id})">Бронь</button>`
+                  : `<button class="btn btn-disabled" disabled>Нет</button>`
+              }
+            </div>
+          </div>
+        </div>
+      `;
 
-    </div>
+      productsEl.appendChild(card);
+    });
+  }
 
-  </div>
-`;
+  async function loadProducts() {
+    const res = await fetch(CSV_URL);
+    const text = await res.text();
 
-        productsEl.appendChild(card);
-      });
-    }
+    const lines = text
+      .replace(/\r/g, "")
+      .split("\n")
+      .filter(line => line.trim() !== "");
 
-async function reserveProduct(productId) {
-  try {
-    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    const rows = lines.slice(1);
 
-    const payload = {
-      product_id: productId,
-      user_id: tgUser?.id ? String(tgUser.id) : "test_user_1",
-      username: tgUser?.username ? tgUser.username : "test_username"
-    };
+    allProducts = rows.map(row => {
+      const cols = parseCSVLine(row);
 
-    const res = await fetch(`/reserve`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
+      return {
+        id: cols[0] || "",
+        name: cols[1] || "",
+        type: cols[2] || "",
+        product_link: cols[3] || "",
+        full_link: cols[4] || "",
+        article: cols[5] || "",
+        image: cols[6] || "",
+        image_link: cols[7] || "",
+        price: cols[8] || "",
+        note: cols[9] || "",
+        date: cols[10] || "",
+        status: cols[11] || "",
+        category: cols[12] || "",
+        pickup_address: cols[13] || ""
+      };
     });
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert(data.detail || "Не удалось забронировать");
-      return;
-    }
-
-    alert(`Товар забронирован до ${data.expires_at}`);
-    location.reload();
-
-  } catch (error) {
-    console.error(error);
-    alert("Ошибка при бронировании");
+    buildCategories();
+    renderProducts();
   }
-}
 
-    loadCategories();
-  </script>
+  async function reserveProduct(productId) {
+    alert("Следующим шагом подключим бронь через Make для товара № " + productId);
+  }
+
+  loadProducts();
+</script>
 </body>
 </html>
+loadProducts();
