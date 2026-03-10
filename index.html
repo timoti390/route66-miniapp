@@ -339,9 +339,37 @@
     renderProducts();
   }
 
-  async function reserveProduct(productId) {
-    alert("Следующим шагом подключим бронь через Make для товара № " + productId);
+  const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/e576o9ilit16hwlobx6i5nfjpu9oskl7";
+
+async function reserveProduct(productId) {
+  try {
+    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+
+    const payload = {
+      product_id: productId,
+      user_id: tgUser?.id ? String(tgUser.id) : "test_user_1",
+      username: tgUser?.username ? tgUser.username : "test_username"
+    };
+
+    const res = await fetch(MAKE_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      alert("Не удалось отправить бронь");
+      return;
+    }
+
+    alert("Бронь отправлена");
+  } catch (error) {
+    console.error(error);
+    alert("Ошибка при отправке брони");
   }
+}
 
   loadProducts();
 </script>
